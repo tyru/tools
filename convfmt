@@ -1,0 +1,109 @@
+#!/usr/bin/env perl
+use common::sense;
+
+use Getopt::Long qw(:config gnu_compat no_bundling no_ignore_case);
+use Pod::Usage;
+use Data::Dump ();
+
+
+my %FORMAT = (
+    yaml => {
+        init => sub { require YAML },
+        load => sub { YAML::Load(shift) },
+        dump => sub { YAML::Dump(shift) },
+    },
+    json => {
+        init => sub { require JSON },
+        load => sub { JSON::decode_json(shift) },
+        dump => sub { JSON::encode_json(shift) },
+    },
+    xml  => {
+        init => sub { require XML::Simple },
+        load => sub { XML::Simple::XMLin(shift) },
+        dump => sub { XML::Simple::XMLout(shift) },
+    },
+);
+
+
+sub usage () {
+    pod2usage(-verbose => 1);
+}
+
+
+my $needhelp;
+my $do_load = 1;
+my $type = 'yaml';
+my $expression;
+GetOptions(
+    'h|help' => \$needhelp,
+    'd|dump' => sub { $do_load = 0 },
+    'l|load' => sub { $do_load = 1 },
+    'e|expression=s' => sub {
+        $expression .= "\n$_[1]";
+    },
+    't|type=s' => sub {
+        my $t = $_[1];
+        unless (exists $FORMAT{$t}) {
+            die "error: does not support that format: $t"
+        }
+        $type = $t;
+    }
+) or usage;
+usage if $needhelp;
+
+$FORMAT{$type}{init}->();
+
+if ($do_load) {
+    $expression //= do {
+        usage if @ARGV == 0;
+        my $filename = shift;
+        unless (-f $filename) {
+            warn "$filename: No such a file\n";
+            usage;
+        }
+        my $FH = IO::File->new($filename) or die "$filename: $!";
+        local $/;
+        <$FH>;
+    };
+    # JSON expression must ends with newline.
+    $expression .= "\n";
+    my $structure = eval { $FORMAT{$type}{load}->($expression) };
+    die "error occurred with an expression '$expression':\n$@\n" if $@;
+    say Data::Dump::dump($structure);
+}
+else {
+    my $structure = eval $expression;
+    die "error occurred with an expression '$expression':\n$@\n" if $@;
+    my $dump = eval { $FORMAT{$type}{dump}->($expression) };
+    die "error occurred with an expression '$expression':\n$@\n" if $@;
+    say $dump;
+}
+
+
+
+
+__END__
+
+=head1 NAME
+
+    convfmt - NO DESCRIPTION YET
+
+
+=head1 SYNOPSIS
+
+    $ convfmt -e "foo: 1" -e "bar: 2" # prints "{foo => 1, bar => 2''}"
+
+=head1 OPTIONS
+
+=over
+
+=item -h, --help
+
+Show this help.
+
+=back
+
+
+=head1 AUTHOR
+
+tyru <tyru.exe@gmail.com>
