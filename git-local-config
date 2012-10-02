@@ -1,5 +1,0 @@
-#!/bin/sh
-
-git rev-parse --git-dir >/dev/null \
-    && git config --list \
-        -f `git rev-parse --show-cdup`.git/config
